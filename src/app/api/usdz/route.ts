@@ -37,6 +37,8 @@ def Xform "Root"
             {
                 uniform token info:id = "UsdPreviewSurface"
                 color3f inputs:diffuseColor.connect = </Root/Plane/Material/diffuseTexture.outputs:rgb>
+                float inputs:opacity.connect = </Root/Plane/Material/diffuseTexture.outputs:a>
+                float inputs:opacityThreshold = 0.5
                 float inputs:metallic = 0
                 float inputs:roughness = 1
                 token outputs:surface
