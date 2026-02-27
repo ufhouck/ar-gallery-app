@@ -52,6 +52,7 @@ def Xform "Root"
             {
                 uniform token info:id = "UsdUVTexture"
                 asset inputs:file = @${filename}@
+                token inputs:sourceColorSpace = "sRGB"
                 token inputs:wrapS = "clamp"
                 token inputs:wrapT = "clamp"
                 float2 inputs:st.connect = </Root/Plane/Material/stReader.outputs:result>
