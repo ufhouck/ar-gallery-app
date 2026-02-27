@@ -2,14 +2,17 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Plus, X, Check, Loader2 } from "lucide-react";
+import { Upload, Plus, X, Check, Loader2, Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
+import ARView from "@/components/ARView";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [showAR, setShowAR] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -33,10 +36,9 @@ export default function Home() {
       });
 
       if (response.ok) {
+        const metadata = await response.json();
+        setUploadedUrl(metadata.url);
         setStatus("success");
-        setTimeout(() => {
-          router.push("/gallery");
-        }, 1500);
       } else {
         setStatus("error");
       }
@@ -89,7 +91,27 @@ export default function Home() {
 
         <div className="flex gap-4">
           <AnimatePresence mode="wait">
-            {file && (
+            {uploadedUrl ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col w-full gap-4"
+              >
+                <button
+                  onClick={() => setShowAR(true)}
+                  className="primary-button flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 shadow-green-100"
+                >
+                  <Camera size={20} />
+                  Hemen AR'da Gör
+                </button>
+                <button
+                  onClick={() => router.push("/gallery")}
+                  className="glass-button py-3 rounded-2xl text-sm font-medium text-gray-600"
+                >
+                  Galeriye Git
+                </button>
+              </motion.div>
+            ) : file && (
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -100,25 +122,27 @@ export default function Home() {
               >
                 {uploading ? (
                   <Loader2 size={20} className="animate-spin" />
-                ) : status === "success" ? (
-                  <Check size={20} />
                 ) : (
                   <Plus size={20} />
                 )}
-                {uploading ? "Yükleniyor..." : status === "success" ? "Kaydedildi!" : "Galeriye Ekle"}
+                {uploading ? "Yükleniyor..." : "Galeriye Ekle"}
               </motion.button>
             )}
           </AnimatePresence>
 
-          {preview && (
+          {file && !uploadedUrl && (
             <button
-              onClick={() => { setFile(null); setPreview(null); setStatus("idle"); }}
+              onClick={() => { setFile(null); setPreview(null); setStatus("idle"); setUploadedUrl(null); }}
               className="p-4 glass-button rounded-2xl text-gray-500"
             >
               <X size={20} />
             </button>
           )}
         </div>
+
+        {showAR && uploadedUrl && (
+          <ARView imageUrl={uploadedUrl} onClose={() => setShowAR(false)} />
+        )}
       </motion.div>
     </div>
   );
