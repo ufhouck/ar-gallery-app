@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
 import { X, RefreshCw } from 'lucide-react';
 
 interface ARViewProps {
@@ -13,53 +12,79 @@ const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [statusText, setStatusText] = useState('AR Deneyimi Hazırlanıyor...');
 
     useEffect(() => {
         let mindarThree: any = null;
-        let renderer: THREE.WebGLRenderer | null = null;
-        let scene: THREE.Scene | null = null;
-        let camera: THREE.PerspectiveCamera | null = null;
+        let stopped = false;
+
+        const MINDAR_CDN = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-three.prod.js';
+        const TARGET_SRC = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/examples/image-tracking/assets/card-example/card.mind';
+
+        const loadScript = (src: string): Promise<void> => {
+            return new Promise((resolve, reject) => {
+                if (document.querySelector(`script[src="${src}"]`)) {
+                    resolve();
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error(`Script yüklenemedi: ${src}`));
+                document.head.appendChild(script);
+            });
+        };
 
         const startAR = async () => {
             try {
-                // Dinamik import (SSR uyumluluğu için ve cache-busting ekliyoruz)
-                const { MindARThree } = await import(`mind-ar/dist/mindar-image-three.prod.js?v=${Date.now()}` as any);
+                setStatusText('MindAR kütüphanesi yükleniyor...');
+                await loadScript(MINDAR_CDN);
+
+                const MINDAR = (window as any).MINDAR;
+                if (!MINDAR) throw new Error('MindAR yüklenemedi');
+
+                const { MindARThree } = MINDAR.IMAGE;
+
+                setStatusText('AR Sahnesi oluşturuluyor...');
+                const THREE = await import('three');
 
                 mindarThree = new MindARThree({
                     container: containerRef.current!,
-                    imageTargetSrc: 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/examples/image-tracking/assets/card-example/card.mind', // Varsayılan bir target gerekebilir, ancak biz markerless'a yakın bir yapı kurmaya çalışacağız
+                    imageTargetSrc: TARGET_SRC,
                 });
 
-                const { renderer: r, scene: s, camera: c } = mindarThree;
-                renderer = r;
-                scene = s;
-                camera = c;
+                const { renderer, scene, camera } = mindarThree;
 
                 const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
                 scene.add(light);
 
-                // Fotoğrafı yükle
                 const textureLoader = new THREE.TextureLoader();
-                textureLoader.load(imageUrl, (texture) => {
-                    const aspectRatio = texture.image.width / texture.image.height; // Corrected aspect ratio calculation
-                    const geometry = new THREE.PlaneGeometry(1, 1 / aspectRatio);
-                    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-                    const plane = new THREE.Mesh(geometry, material);
+                textureLoader.load(
+                    imageUrl,
+                    (texture: any) => {
+                        if (stopped) return;
+                        const ar = texture.image.width / texture.image.height;
+                        const geometry = new THREE.PlaneGeometry(1, 1 / ar);
+                        const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                        const plane = new THREE.Mesh(geometry, material);
+                        const anchor = mindarThree.addAnchor(0);
+                        anchor.group.add(plane);
+                    },
+                    undefined,
+                    (err: any) => console.error('Texture yüklenemedi:', err)
+                );
 
-                    // MindAR marker-based olduğu için bir anchor eklemeliyiz
-                    const anchor = mindarThree.addAnchor(0);
-                    anchor.group.add(plane);
-
-                    setLoading(false);
-                });
-
+                setStatusText('Kamera açılıyor...');
                 await mindarThree.start();
+                setLoading(false);
+
                 renderer.setAnimationLoop(() => {
-                    renderer?.render(scene!, camera!);
+                    renderer.render(scene, camera);
                 });
             } catch (err: any) {
-                console.error("MindAR error:", err);
-                setError("AR başlatılamadı. Lütfen kamera izinlerini kontrol edin.");
+                console.error('MindAR error:', err);
+                setError('AR başlatılamadı: ' + (err.message || 'Bilinmeyen hata'));
                 setLoading(false);
             }
         };
@@ -67,13 +92,10 @@ const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
         startAR();
 
         return () => {
-            if (mindarThree) {
-                mindarThree.stop();
-            }
-            if (renderer) {
-                renderer.setAnimationLoop(null);
-                renderer.dispose();
-            }
+            stopped = true;
+            try {
+                mindarThree?.stop();
+            } catch { }
         };
     }, [imageUrl]);
 
@@ -81,19 +103,20 @@ const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
         <div className="fixed inset-0 z-[100] bg-black">
             <div ref={containerRef} className="w-full h-full" />
 
-            <div className="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none">
+            <div className="absolute top-6 left-6 pointer-events-none">
                 <button
                     onClick={onClose}
                     className="p-3 bg-white/20 backdrop-blur-md rounded-full text-white pointer-events-auto hover:bg-white/30 transition-colors"
+                    aria-label="Kapat"
                 >
                     <X size={24} />
                 </button>
             </div>
 
             {loading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
                     <RefreshCw className="text-white animate-spin mb-4" size={40} />
-                    <p className="text-white font-medium">AR Deneyimi Hazırlanıyor...</p>
+                    <p className="text-white font-medium text-center px-8">{statusText}</p>
                 </div>
             )}
 
@@ -102,20 +125,23 @@ const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
                     <p className="text-red-400 font-medium mb-6">{error}</p>
                     <button
                         onClick={onClose}
-                        className="px-8 py-3 bg-white/10 text-white rounded-2xl font-semibold backdrop-blur-md"
+                        className="px-8 py-3 bg-white/10 text-white rounded-2xl font-semibold"
+                        aria-label="Geri Dön"
                     >
                         Geri Dön
                     </button>
                 </div>
             )}
 
-            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[80%] max-w-xs pointer-events-none">
-                <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-4 rounded-3xl text-center shadow-2xl">
-                    <p className="text-white text-sm font-medium">
-                        Resmi görmek için kamerayı yüzeye tutun.
-                    </p>
+            {!loading && !error && (
+                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[80%] max-w-xs pointer-events-none">
+                    <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-4 rounded-3xl text-center shadow-2xl">
+                        <p className="text-white text-sm font-medium">
+                            Kartı kameraya tutun — görsel üzerinde belirecek.
+                        </p>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
