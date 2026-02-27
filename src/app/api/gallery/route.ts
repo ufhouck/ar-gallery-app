@@ -1,6 +1,8 @@
 import { put } from '@vercel/blob';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
+
+const kv = Redis.fromEnv();
 
 export async function POST(request: Request) {
     const { searchParams } = new URL(request.url);
