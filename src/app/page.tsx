@@ -4,12 +4,14 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Plus, X, Check, Loader2, Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import ARView from "@/components/ARView";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [showAR, setShowAR] = useState(false);
@@ -22,27 +24,29 @@ export default function Home() {
       setFile(selectedFile);
       setPreview(URL.createObjectURL(selectedFile));
       setStatus("idle");
+      setUploadedUrl(null);
     }
   };
 
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
+    setUploadProgress(0);
 
     try {
-      const response = await fetch(`/api/gallery?filename=${file.name}`, {
-        method: 'POST',
-        body: file,
+      // Doğrudan Vercel Blob'a client-side yükleme (4.5MB limitini aşar)
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/gallery',
+        onUploadProgress: (progress) => {
+          setUploadProgress(Math.round(progress.percentage));
+        },
       });
 
-      if (response.ok) {
-        const metadata = await response.json();
-        setUploadedUrl(metadata.url);
-        setStatus("success");
-      } else {
-        setStatus("error");
-      }
-    } catch (err) {
+      setUploadedUrl(blob.url);
+      setStatus("success");
+    } catch (err: any) {
+      console.error('Upload error:', err);
       setStatus("error");
     } finally {
       setUploading(false);
@@ -121,11 +125,10 @@ export default function Home() {
                 className="flex-1 primary-button flex items-center justify-center gap-2"
               >
                 {uploading ? (
-                  <Loader2 size={20} className="animate-spin" />
+                  <><Loader2 size={20} className="animate-spin" /> Yükleniyor... {uploadProgress > 0 ? `${uploadProgress}%` : ''}</>
                 ) : (
-                  <Plus size={20} />
+                  <><Plus size={20} /> Galeriye Ekle</>
                 )}
-                {uploading ? "Yükleniyor..." : "Galeriye Ekle"}
               </motion.button>
             )}
           </AnimatePresence>

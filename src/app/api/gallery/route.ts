@@ -1,37 +1,61 @@
-import { put } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
 
 const kv = Redis.fromEnv();
 
-export async function POST(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const filename = searchParams.get('filename');
-
-    if (!filename) {
-        return NextResponse.json({ error: 'Filename is required' }, { status: 400 });
-    }
+// Client-side upload token handler
+export async function POST(request: Request): Promise<Response> {
+    const body = (await request.json()) as HandleUploadBody;
 
     try {
-        const blob = await put(filename, request.body!, {
-            access: 'public',
-            addRandomSuffix: true,
+        const jsonResponse = await handleUpload({
+            body,
+            request,
+            onBeforeGenerateToken: async (pathname) => {
+                return {
+                    allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+                    addRandomSuffix: true,
+                };
+            },
+            onUploadCompleted: async ({ blob, tokenPayload }) => {
+                // Yükleme tamamlanınca metadata'yı Redis'e kaydet
+                const id = crypto.randomUUID();
+                const filename = blob.pathname.split('/').pop() || blob.pathname;
+                const name = filename.replace(/\.[^.]+$/, '').replace(/-[a-z0-9]{21}$/, '');
+                const metadata = {
+                    id,
+                    url: blob.url,
+                    name,
+                    createdAt: new Date().toISOString(),
+                };
+                await kv.hset('gallery', { [id]: JSON.stringify(metadata) });
+            },
         });
+
+        return NextResponse.json(jsonResponse);
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+}
+
+// Metadata endpoint — client upload tamamlanınca url ile çağrılır
+export async function PUT(request: Request) {
+    try {
+        const { url, name } = await request.json();
+        if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 });
 
         const id = crypto.randomUUID();
         const metadata = {
             id,
-            url: blob.url,
-            name: filename.split('.')[0],
+            url,
+            name: name || url.split('/').pop()?.split('.')[0] || 'görsel',
             createdAt: new Date().toISOString(),
         };
-
         await kv.hset('gallery', { [id]: JSON.stringify(metadata) });
-
         return NextResponse.json(metadata);
     } catch (error: any) {
-        console.error('Upload error:', error);
-        return NextResponse.json({ error: 'Upload failed', details: error.message }, { status: 500 });
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
 
@@ -54,30 +78,19 @@ export async function GET(request: Request) {
 
         const gallery = Object.values(data).map((item: any) => {
             if (!item) return null;
-
             try {
-                // Eğer zaten objeyse (Upstash bazen otomatik parse eder)
                 if (typeof item === 'object' && !Array.isArray(item)) {
-                    // Obje eğer boşsa veya bozuksa null dön
                     if (Object.keys(item).length === 0) return null;
                     return item;
                 }
-
-                // Eğer string ise parse etmeye çalış
                 if (typeof item === 'string') {
                     const trimmed = item.trim();
-                    if (trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "" || trimmed.startsWith('[object')) {
-                        return null;
-                    }
+                    if (trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "" || trimmed.startsWith('[object')) return null;
                     return JSON.parse(trimmed);
                 }
-            } catch (e) {
-                return null;
-            }
+            } catch { return null; }
             return null;
-        }).filter((item): item is any => {
-            return item !== null && typeof item === 'object' && (item.url || item.id);
-        });
+        }).filter((item): item is any => item !== null && typeof item === 'object' && (item.url || item.id));
 
         return NextResponse.json(gallery.sort((a, b) => {
             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -93,13 +106,11 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 });
-
     try {
         await kv.hdel('gallery', id);
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
     }
 }
@@ -108,29 +119,21 @@ export async function PATCH(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const { name } = await request.json();
-
     if (!id || !name) return NextResponse.json({ error: 'ID and name are required' }, { status: 400 });
 
     try {
         const itemVal = await kv.hget('gallery', id);
         if (!itemVal) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-
         let item: any;
-        if (typeof itemVal === 'object') {
-            item = itemVal;
-        } else {
-            try {
-                item = JSON.parse(itemVal as string);
-            } catch (e) {
-                return NextResponse.json({ error: 'Corrupted data' }, { status: 500 });
-            }
+        if (typeof itemVal === 'object') { item = itemVal; }
+        else {
+            try { item = JSON.parse(itemVal as string); }
+            catch { return NextResponse.json({ error: 'Corrupted data' }, { status: 500 }); }
         }
-
         item.name = name;
         await kv.hset('gallery', { [id]: JSON.stringify(item) });
-
         return NextResponse.json(item);
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Update failed' }, { status: 500 });
     }
 }
