@@ -1,35 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { Camera, Image as ImageIcon, Plus } from "lucide-react";
-import { motion } from "framer-motion";
+import { ImageIcon } from "lucide-react";
 
 export function Navbar() {
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 flex justify-center p-4">
-            <nav className="glass-card flex items-center gap-2 px-6 py-3 rounded-full">
-                <Link href="/">
-                    <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 transition-colors"
-                    >
-                        <Camera size={18} className="text-indigo-600" />
-                        <span className="font-medium text-sm">Vizyon AR</span>
-                    </motion.div>
+        <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950 border-b border-white/[0.06]">
+            <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 flex items-center justify-between">
+                {/* Logo */}
+                <Link href="/" className="flex items-center">
+                    <img
+                        src="/monnom-logo.svg"
+                        alt="Monnom"
+                        className="h-5 w-auto"
+                    />
                 </Link>
 
-                <div className="w-px h-4 bg-gray-200 mx-2" />
-
-                <Link href="/gallery">
-                    <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 transition-colors"
-                    >
-                        <ImageIcon size={18} className="text-gray-600" />
-                        <span className="font-medium text-sm">Galeri</span>
-                    </motion.div>
+                {/* Nav link */}
+                <Link
+                    href="/gallery"
+                    className="flex items-center gap-1.5 text-sm text-white/60 hover:text-white transition-colors"
+                >
+                    <ImageIcon size={15} />
+                    Galeri
                 </Link>
-            </nav>
+            </div>
         </header>
     );
 }

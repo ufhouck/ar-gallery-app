@@ -54,21 +54,12 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen items-center justify-between pt-12 pb-6">
+    <div className="flex flex-col min-h-screen items-center justify-between pt-6 pb-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-lg text-center space-y-8 flex-1"
       >
-        <div className="flex justify-center">
-          <div className="bg-gray-900 rounded-2xl px-8 py-4 inline-flex items-center">
-            <img
-              src="/monnom-logo.svg"
-              alt="Monnom"
-              className="h-8 w-auto"
-            />
-          </div>
-        </div>
 
         <div
           onClick={() => fileInputRef.current?.click()}
