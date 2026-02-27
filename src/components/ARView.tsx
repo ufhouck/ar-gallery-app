@@ -22,8 +22,8 @@ const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
 
         const startAR = async () => {
             try {
-                // Dinamik import (SSR uyumluluğu için)
-                const { MindARThree } = await import('mind-ar/dist/mindar-image-three.prod.js' as any);
+                // Dinamik import (SSR uyumluluğu için ve cache-busting ekliyoruz)
+                const { MindARThree } = await import(`mind-ar/dist/mindar-image-three.prod.js?v=${Date.now()}` as any);
 
                 mindarThree = new MindARThree({
                     container: containerRef.current!,
