@@ -38,7 +38,19 @@ export async function POST(request: Request) {
     }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const clear = searchParams.get('clear');
+
+    if (clear === 'true') {
+        try {
+            await kv.del('gallery');
+            return NextResponse.json({ success: true, message: 'Gallery cleared' });
+        } catch (error: any) {
+            return NextResponse.json({ error: 'Failed to clear gallery', details: error.message }, { status: 500 });
+        }
+    }
+
     try {
         const data = await kv.hgetall('gallery');
         if (!data) return NextResponse.json([]);
@@ -47,23 +59,34 @@ export async function GET() {
             if (!item) return null;
 
             // Eğer zaten objeyse (bazı Redis adapterları otomatik parse eder)
-            if (typeof item === 'object') return item;
+            if (typeof item === 'object' && !Array.isArray(item)) return item;
 
             // Eğer string ise parse etmeye çalış
             if (typeof item === 'string') {
-                if (item === "[object Object]" || item.trim() === "") return null;
+                const trimmed = item.trim();
+                // Yaygın hata formatlarını engelle
+                if (trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "") return null;
+
                 try {
-                    return JSON.parse(item);
+                    return JSON.parse(trimmed);
                 } catch (e) {
-                    console.error('Failed to parse Redis item:', item);
+                    // Eğer parse edilemiyorsa ama bir şekilde obje gibi görünüyorsa null dön
+                    if (trimmed.startsWith('[object')) return null;
+                    console.error('Failed to parse Redis item:', trimmed);
                     return null;
                 }
             }
 
             return null;
-        }).filter((item): item is any => item !== null);
+        }).filter((item): item is any => {
+            return item !== null && typeof item === 'object' && item.url;
+        });
 
-        return NextResponse.json(gallery.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        return NextResponse.json(gallery.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return dateB - dateA;
+        }));
     } catch (error: any) {
         console.error('Fetch error:', error);
         return NextResponse.json({ error: 'Failed to fetch gallery', details: error.message }, { status: 500 });
