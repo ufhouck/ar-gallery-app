@@ -44,8 +44,9 @@ export async function GET() {
 
         const gallery = Object.values(data).map((item: any) => JSON.parse(item));
         return NextResponse.json(gallery.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to fetch gallery' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Fetch error:', error);
+        return NextResponse.json({ error: 'Failed to fetch gallery', details: error.message }, { status: 500 });
     }
 }
 
