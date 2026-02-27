@@ -2,10 +2,7 @@ import { put } from '@vercel/blob';
 import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
 
-const kv = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "",
-});
+const kv = Redis.fromEnv();
 
 export async function POST(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -58,28 +55,28 @@ export async function GET(request: Request) {
         const gallery = Object.values(data).map((item: any) => {
             if (!item) return null;
 
-            // Eğer zaten objeyse (bazı Redis adapterları otomatik parse eder)
-            if (typeof item === 'object' && !Array.isArray(item)) return item;
-
-            // Eğer string ise parse etmeye çalış
-            if (typeof item === 'string') {
-                const trimmed = item.trim();
-                // Yaygın hata formatlarını engelle
-                if (trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "") return null;
-
-                try {
-                    return JSON.parse(trimmed);
-                } catch (e) {
-                    // Eğer parse edilemiyorsa ama bir şekilde obje gibi görünüyorsa null dön
-                    if (trimmed.startsWith('[object')) return null;
-                    console.error('Failed to parse Redis item:', trimmed);
-                    return null;
+            try {
+                // Eğer zaten objeyse (Upstash bazen otomatik parse eder)
+                if (typeof item === 'object' && !Array.isArray(item)) {
+                    // Obje eğer boşsa veya bozuksa null dön
+                    if (Object.keys(item).length === 0) return null;
+                    return item;
                 }
-            }
 
+                // Eğer string ise parse etmeye çalış
+                if (typeof item === 'string') {
+                    const trimmed = item.trim();
+                    if (trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "" || trimmed.startsWith('[object')) {
+                        return null;
+                    }
+                    return JSON.parse(trimmed);
+                }
+            } catch (e) {
+                return null;
+            }
             return null;
         }).filter((item): item is any => {
-            return item !== null && typeof item === 'object' && item.url;
+            return item !== null && typeof item === 'object' && (item.url || item.id);
         });
 
         return NextResponse.json(gallery.sort((a, b) => {
@@ -115,10 +112,20 @@ export async function PATCH(request: Request) {
     if (!id || !name) return NextResponse.json({ error: 'ID and name are required' }, { status: 400 });
 
     try {
-        const itemStr = await kv.hget('gallery', id) as string;
-        if (!itemStr) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+        const itemVal = await kv.hget('gallery', id);
+        if (!itemVal) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
 
-        const item = JSON.parse(itemStr);
+        let item: any;
+        if (typeof itemVal === 'object') {
+            item = itemVal;
+        } else {
+            try {
+                item = JSON.parse(itemVal as string);
+            } catch (e) {
+                return NextResponse.json({ error: 'Corrupted data' }, { status: 500 });
+            }
+        }
+
         item.name = name;
         await kv.hset('gallery', { [id]: JSON.stringify(item) });
 
