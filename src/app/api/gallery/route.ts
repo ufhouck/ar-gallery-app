@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     try {
         const blob = await put(filename, request.body!, {
             access: 'public',
+            addRandomSuffix: true,
         });
 
         const id = crypto.randomUUID();
@@ -31,9 +32,9 @@ export async function POST(request: Request) {
         await kv.hset('gallery', { [id]: JSON.stringify(metadata) });
 
         return NextResponse.json(metadata);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Upload error:', error);
-        return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+        return NextResponse.json({ error: 'Upload failed', details: error.message }, { status: 500 });
     }
 }
 
@@ -43,17 +44,24 @@ export async function GET() {
         if (!data) return NextResponse.json([]);
 
         const gallery = Object.values(data).map((item: any) => {
-            try {
-                // Eğer item zaten bir objeyse (bazı Redis istemcileri otomatik parse eder)
-                if (typeof item === 'object' && item !== null) return item;
-                // Eğer item "[object Object]" string'i ise bozuk datadır, temizle
-                if (item === "[object Object]") return null;
-                return JSON.parse(item);
-            } catch (e) {
-                console.error('JSON parse error for item:', item);
-                return null;
+            if (!item) return null;
+
+            // Eğer zaten objeyse (bazı Redis adapterları otomatik parse eder)
+            if (typeof item === 'object') return item;
+
+            // Eğer string ise parse etmeye çalış
+            if (typeof item === 'string') {
+                if (item === "[object Object]" || item.trim() === "") return null;
+                try {
+                    return JSON.parse(item);
+                } catch (e) {
+                    console.error('Failed to parse Redis item:', item);
+                    return null;
+                }
             }
-        }).filter(item => item !== null);
+
+            return null;
+        }).filter((item): item is any => item !== null);
 
         return NextResponse.json(gallery.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error: any) {
