@@ -38,6 +38,7 @@ def Xform "Root"
                 uniform token info:id = "UsdPreviewSurface"
                 color3f inputs:diffuseColor.connect = </Root/Plane/Material/diffuseTexture.outputs:rgb>
                 float inputs:opacity.connect = </Root/Plane/Material/diffuseTexture.outputs:a>
+                float inputs:opacityThreshold = 0.5
                 int inputs:useSpecularWorkflow = 0
                 token outputs:surface
             }
@@ -55,6 +56,7 @@ def Xform "Root"
                 token inputs:wrapT = "clamp"
                 float2 inputs:st.connect = </Root/Plane/Material/stReader.outputs:result>
                 float3 outputs:rgb
+                float outputs:a
             }
         }
     }
