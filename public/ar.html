@@ -20,6 +20,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
+        /* -------- CAMERA OVERLAY (Android/Desktop fallback) -------- */
         #camera {
             position: fixed;
             top: 0;
@@ -118,6 +119,74 @@
             white-space: nowrap;
         }
 
+        /* -------- iOS QuickLook Panel -------- */
+        #quicklook-panel {
+            position: fixed;
+            inset: 0;
+            z-index: 3000;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 40px 32px;
+            text-align: center;
+        }
+
+        #quicklook-panel.hidden {
+            display: none;
+        }
+
+        #quicklook-panel .icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+
+        #quicklook-panel h2 {
+            color: #fff;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        #quicklook-panel p {
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #ql-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            border-radius: 16px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        #ql-btn-back {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 10px 24px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* -------- Overlay / Error -------- */
         #overlay {
             position: fixed;
             inset: 0;
@@ -190,32 +259,44 @@
 </head>
 
 <body>
+    <!-- Loading Overlay -->
     <div id="overlay">
         <div class="spinner"></div>
-        <p>Kamera açılıyor...</p>
+        <p id="status-text">Yükleniyor...</p>
     </div>
 
+    <!-- Error -->
     <div id="error" class="hidden">
-        <p id="error-msg">Kamera açılamadı.</p>
+        <p id="error-msg">Bir hata oluştu.</p>
         <button onclick="history.back()">Geri Dön</button>
     </div>
 
+    <!-- iOS QuickLook Panel -->
+    <div id="quicklook-panel" class="hidden">
+        <div class="icon">🍎</div>
+        <h2>Apple AR QuickLook</h2>
+        <p>Fotoğrafını gerçek dünyada görmek için aşağıdaki butona bas. iOS'un native AR motoru devreye girecek — görsel
+            duvara gerçek olarak oturacak.</p>
+        <!-- QuickLook, rel="ar" ile <a> etiketini kullanır -->
+        <a id="ql-btn" rel="ar" download="ar-scene.usdz">
+            <span>📷</span> AR'ı Başlat
+        </a>
+        <button id="ql-btn-back" onclick="history.back()">Geri Dön</button>
+    </div>
+
+    <!-- Camera Overlay (Android / Desktop) -->
     <video id="camera" autoplay playsinline muted></video>
-
-    <img id="ar-image" draggable="false" alt="AR görüntü">
-
-    <button id="close-btn" onclick="history.back()" aria-label="Kapat">
+    <img id="ar-image" draggable="false" alt="AR görüntü" style="display:none">
+    <button id="close-btn" aria-label="Kapat" onclick="history.back()">
         <svg viewBox="0 0 24 24">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
     </button>
-
-    <div id="hint">Sürükle • Küçült/Büyüt</div>
-
-    <div id="controls">
+    <div id="hint" style="display:none">Sürükle • Küçült/Büyüt</div>
+    <div id="controls" style="display:none">
         <button class="ctrl-btn" id="btn-minus" aria-label="Küçült">−</button>
-        <button class="ctrl-btn" id="btn-opacity" aria-label="Saydamlık" title="Saydamlık">◑</button>
+        <button class="ctrl-btn" id="btn-opacity" aria-label="Saydamlık">◑</button>
         <button class="ctrl-btn" id="btn-plus" aria-label="Büyüt">+</button>
     </div>
 
@@ -225,17 +306,6 @@
         const overlay = document.getElementById('overlay');
         const errorDiv = document.getElementById('error');
         const errorMsg = document.getElementById('error-msg');
-        const video = document.getElementById('camera');
-        const arImg = document.getElementById('ar-image');
-
-        let imgScale = 1;
-        let imgOpacity = 1;
-        let imgX = 0, imgY = 0;
-
-        function setArImagePos() {
-            arImg.style.left = imgX + 'px';
-            arImg.style.top = imgY + 'px';
-        }
 
         function showError(msg) {
             overlay.classList.add('hidden');
@@ -243,105 +313,133 @@
             errorDiv.classList.remove('hidden');
         }
 
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-                    audio: false
-                });
-                video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    overlay.classList.add('hidden');
-                    // Görseli ortala
-                    const w = Math.min(window.innerWidth * 0.6, 360);
-                    arImg.style.width = w + 'px';
-                    arImg.style.height = 'auto';
-                    imgX = (window.innerWidth - w) / 2;
-                    imgY = (window.innerHeight - w * 0.75) / 2;
-                    setArImagePos();
-                };
-            } catch (err) {
-                showError('Kamera açılamadı. Tarayıcı ayarlarından kamera iznini verdiğinizden emin olun.');
-            }
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         }
 
         if (!imageUrl) {
-            showError('Görüntü URL\'si bulunamadı.');
+            showError("Görüntü URL'si bulunamadı.");
+        } else if (isIOS()) {
+            // ---- iOS: Apple QuickLook ----
+            const usdzUrl = `/api/usdz?img=${encodeURIComponent(imageUrl)}`;
+            document.getElementById('status-text').textContent = 'USDZ hazırlanıyor...';
+
+            fetch(usdzUrl, { method: 'HEAD' })
+                .then(r => {
+                    if (!r.ok) throw new Error('USDZ oluşturulamadı');
+                    overlay.classList.add('hidden');
+                    const qlPanel = document.getElementById('quicklook-panel');
+                    const qlBtn = document.getElementById('ql-btn');
+                    qlBtn.href = usdzUrl;
+                    qlPanel.classList.remove('hidden');
+                })
+                .catch(e => showError('AR hazırlanamadı: ' + e.message));
         } else {
+            // ---- Android / Desktop: Camera Overlay ----
+            const video = document.getElementById('camera');
+            const arImg = document.getElementById('ar-image');
+            arImg.style.display = 'block';
+            document.getElementById('hint').style.display = 'block';
+            document.getElementById('controls').style.display = 'flex';
+
+            let imgScale = 1, imgOpacity = 1;
+            let imgX = 0, imgY = 0;
+            let dragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
+            let pinching = false, pinchDist0 = 0, scaleAtPinch = 1;
+
             arImg.src = imageUrl;
             arImg.crossOrigin = 'anonymous';
-            startCamera();
-        }
 
-        // --- DRAG (Mouse + Touch) ---
-        let dragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
-        let pinching = false, pinchDist0 = 0, scaleAtPinch = 1;
-
-        function getDistance(touches) {
-            const dx = touches[0].clientX - touches[1].clientX;
-            const dy = touches[0].clientY - touches[1].clientY;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        arImg.addEventListener('mousedown', e => {
-            dragging = true; startX = e.clientX; startY = e.clientY;
-            origX = imgX; origY = imgY; e.preventDefault();
-        });
-        document.addEventListener('mousemove', e => {
-            if (!dragging) return;
-            imgX = origX + (e.clientX - startX);
-            imgY = origY + (e.clientY - startY);
-            setArImagePos();
-        });
-        document.addEventListener('mouseup', () => { dragging = false; });
-
-        arImg.addEventListener('touchstart', e => {
-            if (e.touches.length === 2) {
-                pinching = true; dragging = false;
-                pinchDist0 = getDistance(e.touches);
-                scaleAtPinch = imgScale;
-            } else if (e.touches.length === 1) {
-                dragging = true;
-                startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-                origX = imgX; origY = imgY;
+            function setPos() {
+                arImg.style.left = imgX + 'px';
+                arImg.style.top = imgY + 'px';
             }
-            e.preventDefault();
-        }, { passive: false });
 
-        document.addEventListener('touchmove', e => {
-            if (pinching && e.touches.length === 2) {
-                const dist = getDistance(e.touches);
-                imgScale = Math.min(3, Math.max(0.2, scaleAtPinch * (dist / pinchDist0)));
+            function getDistance(t) {
+                const dx = t[0].clientX - t[1].clientX;
+                const dy = t[0].clientY - t[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            async function startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { ideal: 'environment' } }, audio: false
+                    });
+                    video.srcObject = stream;
+                    video.onloadedmetadata = () => {
+                        overlay.classList.add('hidden');
+                        const w = Math.min(window.innerWidth * 0.6, 320);
+                        arImg.style.width = w + 'px'; arImg.style.height = 'auto';
+                        imgX = (window.innerWidth - w) / 2;
+                        imgY = (window.innerHeight - 240) / 2;
+                        setPos();
+                    };
+                } catch (e) {
+                    showError('Kamera açılamadı.');
+                }
+            }
+
+            startCamera();
+
+            arImg.addEventListener('mousedown', e => {
+                dragging = true; startX = e.clientX; startY = e.clientY;
+                origX = imgX; origY = imgY; e.preventDefault();
+            });
+            document.addEventListener('mousemove', e => {
+                if (!dragging) return;
+                imgX = origX + e.clientX - startX;
+                imgY = origY + e.clientY - startY;
+                setPos();
+            });
+            document.addEventListener('mouseup', () => dragging = false);
+
+            arImg.addEventListener('touchstart', e => {
+                if (e.touches.length === 2) {
+                    pinching = true; dragging = false;
+                    pinchDist0 = getDistance(e.touches); scaleAtPinch = imgScale;
+                } else {
+                    dragging = true;
+                    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+                    origX = imgX; origY = imgY;
+                }
+                e.preventDefault();
+            }, { passive: false });
+
+            document.addEventListener('touchmove', e => {
+                if (pinching && e.touches.length === 2) {
+                    imgScale = Math.min(3, Math.max(0.2, scaleAtPinch * getDistance(e.touches) / pinchDist0));
+                    arImg.style.transform = `scale(${imgScale})`;
+                    arImg.style.transformOrigin = 'top left';
+                } else if (dragging && e.touches.length === 1) {
+                    imgX = origX + e.touches[0].clientX - startX;
+                    imgY = origY + e.touches[0].clientY - startY;
+                    setPos();
+                }
+                e.preventDefault();
+            }, { passive: false });
+
+            document.addEventListener('touchend', e => {
+                if (e.touches.length < 2) pinching = false;
+                if (e.touches.length === 0) dragging = false;
+            });
+
+            document.getElementById('btn-plus').addEventListener('click', () => {
+                imgScale = Math.min(3, imgScale + 0.2);
                 arImg.style.transform = `scale(${imgScale})`;
                 arImg.style.transformOrigin = 'top left';
-            } else if (dragging && e.touches.length === 1) {
-                imgX = origX + (e.touches[0].clientX - startX);
-                imgY = origY + (e.touches[0].clientY - startY);
-                setArImagePos();
-            }
-            e.preventDefault();
-        }, { passive: false });
-
-        document.addEventListener('touchend', e => {
-            if (e.touches.length < 2) pinching = false;
-            if (e.touches.length === 0) dragging = false;
-        });
-
-        // --- CONTROLS ---
-        document.getElementById('btn-plus').addEventListener('click', () => {
-            imgScale = Math.min(3, imgScale + 0.2);
-            arImg.style.transform = `scale(${imgScale})`;
-            arImg.style.transformOrigin = 'top left';
-        });
-        document.getElementById('btn-minus').addEventListener('click', () => {
-            imgScale = Math.max(0.2, imgScale - 0.2);
-            arImg.style.transform = `scale(${imgScale})`;
-            arImg.style.transformOrigin = 'top left';
-        });
-        document.getElementById('btn-opacity').addEventListener('click', () => {
-            imgOpacity = imgOpacity === 1 ? 0.5 : 1;
-            arImg.style.opacity = imgOpacity;
-        });
+            });
+            document.getElementById('btn-minus').addEventListener('click', () => {
+                imgScale = Math.max(0.2, imgScale - 0.2);
+                arImg.style.transform = `scale(${imgScale})`;
+                arImg.style.transformOrigin = 'top left';
+            });
+            document.getElementById('btn-opacity').addEventListener('click', () => {
+                imgOpacity = imgOpacity === 1 ? 0.5 : 1;
+                arImg.style.opacity = imgOpacity;
+            });
+        }
     </script>
 </body>
 
