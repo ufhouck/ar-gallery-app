@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     try {
         const blob = await put(filename, request.body!, {
-            access: 'public',
+            access: 'private',
         });
 
         const id = crypto.randomUUID();
