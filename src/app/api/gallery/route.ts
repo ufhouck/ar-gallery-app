@@ -42,7 +42,19 @@ export async function GET() {
         const data = await kv.hgetall('gallery');
         if (!data) return NextResponse.json([]);
 
-        const gallery = Object.values(data).map((item: any) => JSON.parse(item));
+        const gallery = Object.values(data).map((item: any) => {
+            try {
+                // Eğer item zaten bir objeyse (bazı Redis istemcileri otomatik parse eder)
+                if (typeof item === 'object' && item !== null) return item;
+                // Eğer item "[object Object]" string'i ise bozuk datadır, temizle
+                if (item === "[object Object]") return null;
+                return JSON.parse(item);
+            } catch (e) {
+                console.error('JSON parse error for item:', item);
+                return null;
+            }
+        }).filter(item => item !== null);
+
         return NextResponse.json(gallery.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error: any) {
         console.error('Fetch error:', error);

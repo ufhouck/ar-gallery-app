@@ -1,150 +1,123 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { X } from "lucide-react";
+import React, { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { X, RefreshCw } from 'lucide-react';
 
 interface ARViewProps {
     imageUrl: string;
     onClose: () => void;
 }
 
-export default function ARView({ imageUrl, onClose }: ARViewProps) {
+const ARView: React.FC<ARViewProps> = ({ imageUrl, onClose }) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!containerRef.current) return;
+        let mindarThree: any = null;
+        let renderer: THREE.WebGLRenderer | null = null;
+        let scene: THREE.Scene | null = null;
+        let camera: THREE.PerspectiveCamera | null = null;
 
-        let scene: THREE.Scene;
-        let camera: THREE.PerspectiveCamera;
-        let renderer: THREE.WebGLRenderer;
-        let reticle: THREE.Mesh;
-        let hitTestSource: any = null;
-        let hitTestSourceRequested = false;
-
-        const init = async () => {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-            light.position.set(0.5, 1, 0.25);
-            scene.add(light);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            containerRef.current?.appendChild(renderer.domElement);
-
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x4f46e5 })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-
-            const controller = renderer.xr.getController(0);
-            controller.addEventListener("select", () => {
-                if (reticle.visible) {
-                    const textureLoader = new THREE.TextureLoader();
-                    const texture = textureLoader.load(imageUrl);
-                    const geometry = new THREE.PlaneGeometry(0.5, 0.7);
-                    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    reticle.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
-                    mesh.rotation.x = -Math.PI / 2;
-                    scene.add(mesh);
-                }
-            });
-            scene.add(controller);
-
+        const startAR = async () => {
             try {
-                const sessionInit = { requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: containerRef.current } };
-                const session = await (navigator as any).xr.requestSession("immersive-ar", sessionInit);
-                renderer.xr.setSession(session);
-            } catch (err) {
-                setError("WebXR bu cihazda desteklenmiyor veya başlatılamadı.");
+                // Dinamik import (SSR uyumluluğu için)
+                const { MindARThree } = await import('mind-ar/dist/mindar-image-three.prod.js' as any);
+
+                mindarThree = new MindARThree({
+                    container: containerRef.current!,
+                    imageTargetSrc: 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/examples/image-tracking/assets/card-example/card.mind', // Varsayılan bir target gerekebilir, ancak biz markerless'a yakın bir yapı kurmaya çalışacağız
+                });
+
+                const { renderer: r, scene: s, camera: c } = mindarThree;
+                renderer = r;
+                scene = s;
+                camera = c;
+
+                const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+                scene.add(light);
+
+                // Fotoğrafı yükle
+                const textureLoader = new THREE.TextureLoader();
+                textureLoader.load(imageUrl, (texture) => {
+                    const aspectRatio = texture.image.width / texture.image.height; // Corrected aspect ratio calculation
+                    const geometry = new THREE.PlaneGeometry(1, 1 / aspectRatio);
+                    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                    const plane = new THREE.Mesh(geometry, material);
+
+                    // MindAR marker-based olduğu için bir anchor eklemeliyiz
+                    const anchor = mindarThree.addAnchor(0);
+                    anchor.group.add(plane);
+
+                    setLoading(false);
+                });
+
+                await mindarThree.start();
+                renderer.setAnimationLoop(() => {
+                    renderer?.render(scene!, camera!);
+                });
+            } catch (err: any) {
+                console.error("MindAR error:", err);
+                setError("AR başlatılamadı. Lütfen kamera izinlerini kontrol edin.");
+                setLoading(false);
             }
         };
 
-        function render(timestamp: number, frame: any) {
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
-
-                if (!hitTestSourceRequested) {
-                    const xrSession = session as any;
-                    xrSession?.requestReferenceSpace("viewer").then((refSpace: any) => {
-                        xrSession?.requestHitTestSource({ space: refSpace }).then((source: any) => {
-                            hitTestSource = source;
-                        });
-                    });
-                    xrSession?.addEventListener("end", () => {
-                        hitTestSourceRequested = false;
-                        hitTestSource = null;
-                        onClose();
-                    });
-                    hitTestSourceRequested = true;
-                }
-
-                if (hitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    if (hitTestResults.length) {
-                        const hit = hitTestResults[0];
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                    } else {
-                        reticle.visible = false;
-                    }
-                }
-            }
-            renderer.render(scene, camera);
-        }
-
-        init().then(() => {
-            if (renderer) {
-                renderer.setAnimationLoop(render);
-            }
-        });
+        startAR();
 
         return () => {
+            if (mindarThree) {
+                mindarThree.stop();
+            }
             if (renderer) {
                 renderer.setAnimationLoop(null);
-                renderer.xr.getSession()?.end();
+                renderer.dispose();
             }
         };
-    }, [imageUrl, onClose]);
+    }, [imageUrl]);
 
     return (
-        <div ref={containerRef} className="fixed inset-0 z-[100] bg-black">
-            {error && (
-                <div className="absolute inset-0 flex items-center justify-center p-8 text-center bg-white">
-                    <div className="space-y-4">
-                        <p className="text-red-500 font-medium">{error}</p>
-                        <button onClick={onClose} className="primary-button">Geri Dön</button>
-                    </div>
-                </div>
-            )}
+        <div className="fixed inset-0 z-[100] bg-black">
+            <div ref={containerRef} className="w-full h-full" />
 
-            <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-[110] pointer-events-none">
+            <div className="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none">
                 <button
                     onClick={onClose}
-                    className="p-3 glass-button rounded-full pointer-events-auto text-white bg-black/20"
+                    className="p-3 bg-white/20 backdrop-blur-md rounded-full text-white pointer-events-auto hover:bg-white/30 transition-colors"
                 >
                     <X size={24} />
                 </button>
-                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
-                    <span className="text-white text-sm font-medium">Yüzey Taranıyor...</span>
-                </div>
             </div>
 
-            <div className="absolute bottom-12 left-0 right-0 flex justify-center z-[110] pointer-events-none">
-                <p className="bg-white/90 text-black px-6 py-3 rounded-2xl text-sm font-medium shadow-xl">
-                    Yüzeye dokunarak fotoğrafı yerleştir.
-                </p>
+            {loading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <RefreshCw className="text-white animate-spin mb-4" size={40} />
+                    <p className="text-white font-medium">AR Deneyimi Hazırlanıyor...</p>
+                </div>
+            )}
+
+            {error && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black p-8 text-center">
+                    <p className="text-red-400 font-medium mb-6">{error}</p>
+                    <button
+                        onClick={onClose}
+                        className="px-8 py-3 bg-white/10 text-white rounded-2xl font-semibold backdrop-blur-md"
+                    >
+                        Geri Dön
+                    </button>
+                </div>
+            )}
+
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[80%] max-w-xs pointer-events-none">
+                <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-4 rounded-3xl text-center shadow-2xl">
+                    <p className="text-white text-sm font-medium">
+                        Resmi görmek için kamerayı yüzeye tutun.
+                    </p>
+                </div>
             </div>
         </div>
     );
-}
+};
+
+export default ARView;
