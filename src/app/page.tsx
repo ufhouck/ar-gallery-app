@@ -54,19 +54,20 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center pt-12">
+    <div className="flex flex-col min-h-screen items-center justify-between pt-12 pb-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg text-center space-y-8"
+        className="w-full max-w-lg text-center space-y-8 flex-1"
       >
-        <div className="space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-            AR Galerini Olanaklı Kıl
-          </h1>
-          <p className="text-lg text-gray-600">
-            Fotoğrafını yükle ve gerçek dünyada duvarına as.
-          </p>
+        <div className="flex justify-center">
+          <div className="bg-gray-900 rounded-2xl px-8 py-4 inline-flex items-center">
+            <img
+              src="/monnom-logo.svg"
+              alt="Monnom"
+              className="h-8 w-auto"
+            />
+          </div>
         </div>
 
         <div
@@ -147,6 +148,10 @@ export default function Home() {
           <ARView imageUrl={uploadedUrl} onClose={() => setShowAR(false)} />
         )}
       </motion.div>
+
+      <footer className="mt-8 text-center text-xs text-gray-400">
+        © 2026 Monnom. Tüm hakları saklıdır.
+      </footer>
     </div>
   );
 }
