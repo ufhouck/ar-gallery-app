@@ -37,7 +37,10 @@ function GalleryCard({ item, onAR, onDelete, onSave }: {
     return (
         <div className="group relative flex flex-col glass-card rounded-3xl overflow-hidden">
             {/* Görsel */}
-            <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
+            <div
+                className="relative aspect-[4/5] overflow-hidden bg-gray-100 cursor-pointer"
+                onClick={() => onAR(item.url)}
+            >
                 {/* Blur Placeholder — küçük thumbnail hemen yüklenir */}
                 <img
                     src={thumbnailUrl(item.url, 30)}
@@ -55,15 +58,11 @@ function GalleryCard({ item, onAR, onDelete, onSave }: {
                     className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
                 />
 
-                {/* AR Butonu — hover/tap overlay */}
+                {/* Hover overlay (desktop için) */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
-                    <button
-                        onClick={() => onAR(item.url)}
-                        className="p-3 bg-white/90 backdrop-blur-sm rounded-full text-indigo-600 shadow-xl scale-0 group-hover:scale-100 transition-transform duration-200 active:scale-90"
-                        aria-label="AR'da görüntüle"
-                    >
+                    <div className="p-3 bg-white/90 backdrop-blur-sm rounded-full text-indigo-600 shadow-xl scale-0 group-hover:scale-100 transition-transform duration-200">
                         <Camera size={20} />
-                    </button>
+                    </div>
                 </div>
 
                 {/* Tarih badge */}
