@@ -6,12 +6,14 @@ import { Upload, Plus, X, Check, Loader2, Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import ARView from "@/components/ARView";
+import { isTransparent, removeBackground } from "@/lib/image-utils";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingMsg, setProcessingMsg] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [showAR, setShowAR] = useState(false);
@@ -32,10 +34,28 @@ export default function Home() {
     if (!file) return;
     setUploading(true);
     setUploadProgress(0);
+    setProcessingMsg(null);
 
     try {
-      // Doğrudan Vercel Blob'a client-side yükleme (4.5MB limitini aşar)
-      const blob = await upload(file.name, file, {
+      let finalFile: File | Blob = file;
+      let finalFileName = file.name;
+
+      // 1. Şeffaflık Kontrolü ve Arkaplan Temizleme
+      setProcessingMsg("Fotoğraf analiz ediliyor...");
+      const hasAlpha = await isTransparent(file);
+
+      if (!hasAlpha) {
+        setProcessingMsg("Arkaplan temizleniyor...");
+        const bgRemovedBlob = await removeBackground(file, (msg) => {
+          setProcessingMsg(msg);
+        });
+        finalFile = bgRemovedBlob;
+        finalFileName = finalFileName.replace(/\.[^/.]+$/, "") + "_transparent.png";
+      }
+
+      setProcessingMsg(null);
+      // 2. Doğrudan Vercel Blob'a client-side yükleme
+      const blob = await upload(finalFileName, finalFile, {
         access: 'public',
         handleUploadUrl: '/api/gallery',
         onUploadProgress: (progress) => {
@@ -117,7 +137,7 @@ export default function Home() {
                 className="flex-1 primary-button flex items-center justify-center gap-2"
               >
                 {uploading ? (
-                  <><Loader2 size={20} className="animate-spin" /> Yükleniyor... {uploadProgress > 0 ? `${uploadProgress}%` : ''}</>
+                  <><Loader2 size={20} className="animate-spin" /> {processingMsg ? processingMsg : `Yükleniyor... ${uploadProgress > 0 ? uploadProgress + '%' : ''}`}</>
                 ) : (
                   <><Plus size={20} /> Galeriye Ekle</>
                 )}
