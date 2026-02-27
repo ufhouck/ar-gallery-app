@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Plus } from "lucide-react";
 
 export function Navbar() {
     return (
@@ -16,14 +16,23 @@ export function Navbar() {
                     />
                 </Link>
 
-                {/* Nav link */}
-                <Link
-                    href="/gallery"
-                    className="flex items-center gap-1.5 text-sm text-white/60 hover:text-white transition-colors"
-                >
-                    <ImageIcon size={15} />
-                    Galeri
-                </Link>
+                {/* Nav links */}
+                <div className="flex items-center gap-4">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-1.5 text-sm font-medium text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition-colors"
+                    >
+                        <Plus size={15} />
+                        Görsel Ekle
+                    </Link>
+                    <Link
+                        href="/gallery"
+                        className="flex items-center gap-1.5 text-sm text-white/60 hover:text-white transition-colors"
+                    >
+                        <ImageIcon size={15} />
+                        Galeri
+                    </Link>
+                </div>
             </div>
         </header>
     );
